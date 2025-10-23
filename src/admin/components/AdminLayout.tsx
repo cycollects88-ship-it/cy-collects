@@ -19,7 +19,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
     if (path.includes('/admin/categories')) return 'categories';
     if (path.includes('/admin/services')) return 'services';
     if (path.includes('/admin/users')) return 'users';
-    if (path.includes('/admin/want-to-buy')) return 'want-to-buy';
+    if (path.includes('/admin/want-to-buy')) return 'Card Request';
     return 'inventory';
   };
   
@@ -58,18 +58,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
       ),
     },
     {
-      id: "users",
-      label: "Users",
-      path: "/admin/users",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-        </svg>
-      ),
-    },
-    {
       id: "want-to-buy",
-      label: "Want to Buy",
+      label: "Card Requests",
       path: "/admin/want-to-buy",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

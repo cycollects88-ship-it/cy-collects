@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCategoryContext } from "../../contexts/CategoryContext";
 import { Category, CategoryInsert, CategoryUpdate } from "../../contexts/CategoryContext";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import AlertDialog from "../../components/AlertDialog";
 
 // Animation variants
 const containerVariants = {
@@ -85,6 +87,9 @@ const CategoriesPage: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showAlert, setShowAlert] = useState<{ isOpen: boolean; message: string; variant: "success" | "error" }>({ isOpen: false, message: "", variant: "success" });
 
   const filteredCategories = categories.filter(category =>
     category.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false
@@ -100,24 +105,34 @@ const CategoriesPage: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleDeleteCategory = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this category?")) {
+  const handleDeleteCategory = (id: string) => {
+    setDeleteTargetId(id);
+    setShowConfirmDelete(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId) {
       setIsSubmitting(true);
-      const success = await deleteCategory(id);
-      if (success) {
-        // Category will be removed from context automatically
-      } else {
-        alert("Failed to delete category. Please try again.");
+      const success = await deleteCategory(deleteTargetId);
+      if (!success) {
+        setShowAlert({ isOpen: true, message: "Failed to delete category. Please try again.", variant: "error" });
       }
       setIsSubmitting(false);
+      setShowConfirmDelete(false);
+      setDeleteTargetId(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setShowConfirmDelete(false);
+    setDeleteTargetId(null);
   };
 
   const handleToggleActive = async (id: string) => {
     setIsSubmitting(true);
     const success = await toggleCategoryActive(id);
     if (!success) {
-      alert("Failed to toggle category status. Please try again.");
+      setShowAlert({ isOpen: true, message: "Failed to toggle category status. Please try again.", variant: "error" });
     }
     setIsSubmitting(false);
   };
@@ -132,7 +147,7 @@ const CategoriesPage: React.FC = () => {
         setShowModal(false);
         // Category will be updated in context automatically
       } else {
-        alert("Failed to update category. Please try again.");
+        setShowAlert({ isOpen: true, message: "Failed to update category. Please try again.", variant: "error" });
       }
     } else {
       // Add new category
@@ -141,7 +156,7 @@ const CategoriesPage: React.FC = () => {
         setShowModal(false);
         // Category will be added to context automatically
       } else {
-        alert("Failed to create category. Please try again.");
+        setShowAlert({ isOpen: true, message: "Failed to create category. Please try again.", variant: "error" });
       }
     }
     
@@ -328,6 +343,27 @@ const CategoriesPage: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        title="Delete Category?"
+        message="Are you sure you want to delete this category? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+
+      {/* Alert Dialog */}
+      <AlertDialog
+        isOpen={showAlert.isOpen}
+        title={showAlert.variant === "error" ? "Error" : "Success"}
+        message={showAlert.message}
+        variant={showAlert.variant}
+        onClose={() => setShowAlert({ isOpen: false, message: "", variant: "success" })}
+      />
     </motion.div>
   );
 };

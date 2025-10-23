@@ -33,9 +33,9 @@ interface WantToBuyContextProps {
 const WantToBuyContext = createContext<WantToBuyContextProps | undefined>(undefined);
 
 /**
- * WantToBuyProvider component that manages want to buy state and provides want to buy-related functions
+ * WantToBuyProvider component that manages card request state and provides card request-related functions
  */
-export function WantToBuyProvider({ children }: { children: ReactNode }) {
+export function WantToBuyProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [loading, setLoading] = useState<boolean>(true);
   const [wantToBuyItems, setWantToBuyItems] = useState<WantToBuy[]>([]);
   const { user } = useAuthContext();
@@ -49,35 +49,24 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    // Temporarily disable Supabase calls for testing
-    setWantToBuyItems([]);
-    setLoading(false);
-    return;
-    
     const fetchWantToBuyItems = async () => {
-      if (!user) {
-        setWantToBuyItems([]);
-        setLoading(false);
-        return;
-      }
-
       try {
         setLoading(true);
         
+        // Fetch all card request items (admin needs to see all, not just user's)
         const { data, error } = await supabase
           .from("want_to_buy")
           .select("*")
-          .eq("user_id", user.id)
           .order("created_at", { ascending: false });
 
         if (error) {
-          console.error("WantToBuyContext - Error fetching want to buy items:", error);
+          console.error("WantToBuyContext - Error fetching card request items:", error);
           setWantToBuyItems([]);
         } else {
           setWantToBuyItems(data || []);
         }
       } catch (error) {
-        console.error("WantToBuyContext - Exception fetching want to buy items:", error);
+        console.error("WantToBuyContext - Exception fetching card request items:", error);
         setWantToBuyItems([]);
       } finally {
         setLoading(false);
@@ -86,55 +75,42 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
 
     fetchWantToBuyItems();
 
-    // Set up real-time subscription for want to buy changes
-    // Temporarily disabled for testing
-    /*
-    let subscription: any = null;
-    
-    if (user) {
-      const channelName = `want-to-buy-${user.id}`;
-      const handleRealtimeChange = (payload: any) => {
-        if (payload.eventType === "INSERT" && payload.new) {
-          setWantToBuyItems(prev => [payload.new as WantToBuy, ...prev]);
-        } else if (payload.eventType === "UPDATE" && payload.new) {
-          setWantToBuyItems(prev => prev.map(item => 
-            item.id === payload.new.id ? payload.new as WantToBuy : item
-          ));
-        } else if (payload.eventType === "DELETE" && payload.old) {
-          setWantToBuyItems(prev => prev.filter(item => item.id !== payload.old.id));
+    // Set up real-time subscription for card request changes
+    const channelName = "want-to-buy-all";
+    const subscription = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "want_to_buy"
+        },
+        async (payload) => {
+          if (payload.eventType === "INSERT" && payload.new) {
+            setWantToBuyItems(prev => [payload.new as WantToBuy, ...prev]);
+          } else if (payload.eventType === "UPDATE" && payload.new) {
+            setWantToBuyItems(prev => prev.map(item => 
+              item.id === (payload.new as WantToBuy).id ? payload.new as WantToBuy : item
+            ));
+          } else if (payload.eventType === "DELETE" && payload.old) {
+            setWantToBuyItems(prev => prev.filter(item => item.id !== (payload.old as WantToBuy).id));
+          }
         }
-      };
-
-      subscription = supabase
-        .channel(channelName)
-        .on(
-          "postgres_changes",
-          { 
-            event: "*", 
-            schema: "public", 
-            table: "want_to_buy",
-            filter: `user_id=eq.${user.id}`
-          },
-          handleRealtimeChange
-        )
-        .subscribe();
-    }
-    */
+      )
+      .subscribe();
 
     return () => {
-      // Temporarily disabled for testing
-      /*
       if (subscription) {
-        subscription.unsubscribe().catch((error: any) => {
+        subscription.unsubscribe().catch((error: unknown) => {
           console.error("WantToBuyContext - Error unsubscribing:", error);
         });
       }
-      */
     };
-  }, [user]);
+  }, []);
 
   /**
-   * Add item to want to buy list
+   * Add item to card request list
    */
   const addWantToBuy = useCallback(async (item: WantToBuyInsert): Promise<boolean> => {
     if (!user) {
@@ -148,20 +124,20 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
         .insert([{ ...item, user_id: user.id }]);
 
       if (error) {
-        console.error("WantToBuyContext - Error adding want to buy item:", error);
+        console.error("WantToBuyContext - Error adding card request item:", error);
         return false;
       }
 
-      console.log("WantToBuyContext - Successfully added want to buy item");
+      console.log("WantToBuyContext - Successfully added card request item");
       return true;
     } catch (error) {
-      console.error("WantToBuyContext - Exception adding want to buy item:", error);
+      console.error("WantToBuyContext - Exception adding card request item:", error);
       return false;
     }
   }, [user]);
 
   /**
-   * Update want to buy item
+   * Update card request item
    */
   const updateWantToBuy = useCallback(async (itemId: string, updates: WantToBuyUpdate): Promise<boolean> => {
     if (!user) {
@@ -177,20 +153,21 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
         .eq("user_id", user.id);
 
       if (error) {
-        console.error("WantToBuyContext - Error updating want to buy item:", error);
+        console.error("WantToBuyContext - Error updating card request item:", error);
         return false;
       }
 
-      console.log("WantToBuyContext - Successfully updated want to buy item");
+      console.log("WantToBuyContext - Successfully updated card request item");
       return true;
     } catch (error) {
-      console.error("WantToBuyContext - Exception updating want to buy item:", error);
+      console.error("WantToBuyContext - Exception updating card request item:", error);
       return false;
     }
   }, [user]);
 
   /**
-   * Delete want to buy item
+   * Delete card request item
+   * Note: Admins can delete any request (no user_id check), regular users would be restricted by RLS policies
    */
   const deleteWantToBuy = useCallback(async (itemId: string): Promise<boolean> => {
     if (!user) {
@@ -199,21 +176,21 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Remove user_id check to allow admins to delete any request
       const { error } = await supabase
         .from("want_to_buy")
         .delete()
-        .eq("id", itemId)
-        .eq("user_id", user.id);
+        .eq("id", itemId);
 
       if (error) {
-        console.error("WantToBuyContext - Error deleting want to buy item:", error);
+        console.error("WantToBuyContext - Error deleting card request item:", error);
         return false;
       }
 
-      console.log("WantToBuyContext - Successfully deleted want to buy item");
+      console.log("WantToBuyContext - Successfully deleted card request item");
       return true;
     } catch (error) {
-      console.error("WantToBuyContext - Exception deleting want to buy item:", error);
+      console.error("WantToBuyContext - Exception deleting card request item:", error);
       return false;
     }
   }, [user]);
@@ -233,21 +210,21 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
   }, [updateWantToBuy]);
 
   /**
-   * Get want to buy items by user
+   * Get card request items by user
    */
   const getWantToBuyByUser = useCallback((userId: string): WantToBuy[] => {
     return wantToBuyItems.filter(item => item.user_id === userId);
   }, [wantToBuyItems]);
 
   /**
-   * Get want to buy item by ID
+   * Get card request item by ID
    */
   const getWantToBuyById = useCallback((itemId: string): WantToBuy | undefined => {
     return wantToBuyItems.find(item => item.id === itemId);
   }, [wantToBuyItems]);
 
   /**
-   * Search want to buy items by card name
+   * Search card request items by card name
    */
   const searchWantToBuy = useCallback((query: string): WantToBuy[] => {
     if (!query.trim()) return wantToBuyItems;
@@ -262,7 +239,7 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
   const completedItems = wantToBuyItems.filter(item => item.done === true);
   const pendingItems = wantToBuyItems.filter(item => item.done !== true);
 
-  const value: WantToBuyContextProps = {
+  const value: WantToBuyContextProps = React.useMemo(() => ({
     loading,
     wantToBuyItems,
     completedItems,
@@ -275,7 +252,20 @@ export function WantToBuyProvider({ children }: { children: ReactNode }) {
     getWantToBuyByUser,
     getWantToBuyById,
     searchWantToBuy,
-  };
+  }), [
+    loading,
+    wantToBuyItems,
+    completedItems,
+    pendingItems,
+    addWantToBuy,
+    updateWantToBuy,
+    deleteWantToBuy,
+    markAsDone,
+    markAsPending,
+    getWantToBuyByUser,
+    getWantToBuyById,
+    searchWantToBuy,
+  ]);
 
   return (
     <WantToBuyContext.Provider value={value}>

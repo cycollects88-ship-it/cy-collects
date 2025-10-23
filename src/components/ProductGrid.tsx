@@ -1,132 +1,80 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useProductContext, Product } from "../contexts/ProductContext";
+import { useCategoryContext } from "../contexts/CategoryContext";
+import { useCartContext } from "../contexts/CartContext";
+import Toast from "./Toast";
+import ProductDetailModal from "./ProductDetailModal";
 
-/**
- * Product interface for type safety
- */
-interface Product {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  image: string;
-  condition: string;
-  stock: number;
-  category: string;
+interface ProductGridProps {
+  initialCategory?: string;
+  searchQuery?: string;
 }
 
 /**
  * ProductGrid component displaying inventory items
- * Features modern card design with stock indicators and add to cart functionality
+ * Features modern card design with add to cart functionality
  */
-const ProductGrid: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery }) => {
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "all");
+  const { products, loading: productsLoading, searchProducts } = useProductContext();
+  const { categories, loading: categoriesLoading } = useCategoryContext();
+  const { addToCart } = useCartContext();
+  const [addingToCart, setAddingToCart] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Mock product data - in a real app, this would come from your database
-  const products: Product[] = [
-    {
-      id: 1,
-      name: "Magnemite LV.X DP5",
-      description: "Condition A- Magnemite LV.X DP5 Unlimited Edition",
-      price: 3480,
-      image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=300&h=300&fit=crop",
-      condition: "A-",
-      stock: 2,
-      category: "rare",
-    },
-    {
-      id: 2,
-      name: "Pokemon Card Game Deck Shield",
-      description: "New Pokemon Card Game Deck Shield Poliwag & Sunkern & Heracross & Chimecho",
-      price: 1980,
-      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
-      condition: "New",
-      stock: 1,
-      category: "accessories",
-    },
-    {
-      id: 3,
-      name: "Premium Mat Collection",
-      description: "New Pokemon Card Game Deck Shield Premium Mat Momowarou & Okidogi & Munkidori & Fezandipiti",
-      price: 3980,
-      image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=300&h=300&fit=crop",
-      condition: "New",
-      stock: 1,
-      category: "accessories",
-    },
-    {
-      id: 4,
-      name: "Koraidon Slate Deck Shield",
-      description: "New Pokemon Card Game Deck Shield Overseas Edition Koraidon Slate",
-      price: 1980,
-      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
-      condition: "New",
-      stock: 1,
-      category: "accessories",
-    },
-    {
-      id: 5,
-      name: "Evolution Path Cinderace",
-      description: "New Pokemon Card Game Deck Shield Evolution Path Cinderace",
-      price: 1280,
-      image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=300&h=300&fit=crop",
-      condition: "New",
-      stock: 1,
-      category: "accessories",
-    },
-    {
-      id: 6,
-      name: "Cynthia's Garchomp ex",
-      description: "Condition B+ Cynthia's Garchomp ex SAR SV9a 087/063 [KK]",
-      price: 22800,
-      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
-      condition: "B+",
-      stock: 1,
-      category: "rare",
-    },
-    {
-      id: 7,
-      name: "Charizard VMAX",
-      description: "Shiny Charizard VMAX from Darkness Ablaze",
-      price: 15800,
-      image: "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=300&h=300&fit=crop",
-      condition: "A",
-      stock: 3,
-      category: "rare",
-    },
-    {
-      id: 8,
-      name: "Booster Pack Set",
-      description: "Sword & Shield Base Set Booster Pack (10 Pack Bundle)",
-      price: 4500,
-      image: "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
-      condition: "New",
-      stock: 5,
-      category: "packs",
-    },
-  ];
+  // Update selected category when initialCategory prop changes
+  useEffect(() => {
+    if (initialCategory) {
+      setSelectedCategory(initialCategory);
+    }
+  }, [initialCategory]);
 
-  const categories = [
-    { value: "all", label: "All Products" },
-    { value: "rare", label: "Rare Cards" },
-    { value: "accessories", label: "Accessories" },
-    { value: "packs", label: "Booster Packs" },
-  ];
-
-  const filteredProducts = selectedCategory === "all" 
-    ? products 
-    : products.filter(product => product.category === selectedCategory);
-
-  const getStockColor = (stock: number) => {
-    if (stock > 3) return "text-green-600 bg-green-100";
-    if (stock > 1) return "text-yellow-600 bg-yellow-100";
-    return "text-red-600 bg-red-100";
+  /**
+   * Handle adding product to cart
+   */
+  const handleAddToCart = async (productId: string) => {
+    setAddingToCart(productId);
+    const result = await addToCart(productId, 1);
+    
+    if (result.error) {
+      setShowToast({ message: "Failed to add to cart. Please login first.", type: "error" });
+    } else {
+      setShowToast({ message: "Product added to cart!", type: "success" });
+    }
+    
+    setAddingToCart(null);
   };
 
-  const getStockText = (stock: number) => {
-    if (stock > 3) return `${stock} in stock`;
-    if (stock > 1) return `Only ${stock} left`;
-    return "Only 1 remaining";
+  /**
+   * Handle product card click to show details
+   */
+  const handleProductClick = (product: Product) => {
+    setSelectedProduct(product);
   };
+
+  /**
+   * Handle closing the product detail modal
+   */
+  const handleCloseModal = () => {
+    setSelectedProduct(null);
+  };
+
+  /**
+   * Handle add to cart from modal
+   */
+  const handleAddToCartFromModal = async (productId: string) => {
+    await handleAddToCart(productId);
+    setSelectedProduct(null);
+  };
+
+  // Filter products by search query and category
+  let filteredProducts = searchQuery ? searchProducts(searchQuery) : products;
+  
+  // Apply category filter if not "all"
+  if (selectedCategory !== "all") {
+    filteredProducts = filteredProducts.filter(product => product.category_id === selectedCategory);
+  }
 
   return (
     <section className="py-16 bg-gray-50">
@@ -137,90 +85,145 @@ const ProductGrid: React.FC = () => {
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Newly Arrived!</h2>
             <p className="text-gray-600">Discover the latest additions to our collection</p>
           </div>
-          <a
-            href="#"
-            className="inline-flex items-center text-[#7D78A3] hover:text-[#A29CBB] font-medium transition-colors duration-200 mt-4 sm:mt-0"
-          >
-            View All Products
-            <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </a>
+          <div className="text-sm text-gray-500 mt-4 sm:mt-0">
+            Showing {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"}
+          </div>
         </div>
 
         {/* Category Filter */}
-        <div className="flex flex-wrap gap-2 mb-8">
-          {categories.map((category) => (
+        {!categoriesLoading && categories.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-8">
             <button
-              key={category.value}
-              onClick={() => setSelectedCategory(category.value)}
+              onClick={() => setSelectedCategory("all")}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 ${
-                selectedCategory === category.value
+                selectedCategory === "all"
                   ? "bg-[#7D78A3] text-white"
                   : "bg-white text-gray-700 hover:bg-[#A29CBB]/10 border border-gray-200"
               }`}
             >
-              {category.label}
+              All Products
             </button>
-          ))}
-        </div>
+            {categories.filter(cat => cat.active).map((category) => (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 ${
+                  selectedCategory === category.id
+                    ? "bg-[#7D78A3] text-white"
+                    : "bg-white text-gray-700 hover:bg-[#A29CBB]/10 border border-gray-200"
+                }`}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProducts.map((product) => (
-            <div
-              key={product.id}
-              className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group"
-            >
-              {/* Product Image */}
-              <div className="relative aspect-square overflow-hidden">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="absolute top-3 left-3">
-                  <span className="px-2 py-1 bg-[#7D78A3] text-white text-xs font-medium rounded-full">
-                    {product.condition}
-                  </span>
-                </div>
-                <div className="absolute top-3 right-3">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStockColor(product.stock)}`}>
-                    {getStockText(product.stock)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Product Info */}
-              <div className="p-4">
-                <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2">
-                  {product.name}
-                </h3>
-                <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                  {product.description}
-                </p>
-                
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-2xl font-bold text-[#7D78A3]">
-                    ¥{product.price.toLocaleString()}
-                  </span>
-                </div>
-
-                <button className="w-full bg-[#7D78A3] hover:bg-[#A29CBB] text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200">
-                  Add to Cart
+        {productsLoading && (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#7D78A3]"></div>
+          </div>
+        )}
+        
+        {!productsLoading && filteredProducts.length === 0 && (
+          <div className="text-center py-16">
+            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            </svg>
+            <p className="text-gray-500 text-lg">No products found</p>
+          </div>
+        )}
+        
+        {!productsLoading && filteredProducts.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredProducts.map((product) => (
+              <div
+                key={product.id}
+                className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group"
+              >
+                {/* Product Image - Clickable */}
+                <button 
+                  type="button"
+                  className="relative aspect-square overflow-hidden w-full"
+                  onClick={() => handleProductClick(product)}
+                  aria-label={`View details for ${product.name || "product"}`}
+                >
+                  {product.media_url_front ? (
+                    <img
+                      src={product.media_url_front}
+                      alt={product.name || "Product"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                      <svg className="w-16 h-16 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  {product.condition && (
+                    <div className="absolute top-3 left-3">
+                      <span className="px-2 py-1 bg-[#7D78A3] text-white text-xs font-medium rounded-full">
+                        {product.condition}
+                      </span>
+                    </div>
+                  )}
+                  {/* View Details Overlay */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center pointer-events-none">
+                    <span className="text-white font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      View Details
+                    </span>
+                  </div>
                 </button>
-              </div>
-            </div>
-          ))}
-        </div>
 
-        {/* Load More Button */}
-        <div className="text-center mt-12">
-          <button className="bg-white border-2 border-[#7D78A3] text-[#7D78A3] hover:bg-[#7D78A3] hover:text-white font-medium py-3 px-8 rounded-lg transition-colors duration-200">
-            Load More Products
-          </button>
-        </div>
+                {/* Product Info */}
+                <div className="p-4">
+                  <button 
+                    className="w-full text-left font-semibold text-gray-900 mb-2 line-clamp-2 min-h-[3rem] hover:text-[#7D78A3] transition-colors"
+                    onClick={() => handleProductClick(product)}
+                  >
+                    {product.name || "Unnamed Product"}
+                  </button>
+                  
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-2xl font-bold text-[#7D78A3]">
+                      BND ${(product.price || 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <button 
+                    onClick={() => handleAddToCart(product.id)}
+                    disabled={addingToCart === product.id}
+                    className="w-full bg-[#7D78A3] hover:bg-[#A29CBB] text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {addingToCart === product.id ? "Adding..." : "Add to Cart"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Toast Notification */}
+      {showToast && (
+        <Toast
+          message={showToast.message}
+          type={showToast.type}
+          onClose={() => setShowToast(null)}
+        />
+      )}
+
+      {/* Product Detail Modal */}
+      {selectedProduct && (
+        <ProductDetailModal
+          product={selectedProduct}
+          onClose={handleCloseModal}
+          onAddToCart={handleAddToCartFromModal}
+          isAddingToCart={addingToCart === selectedProduct.id}
+        />
+      )}
     </section>
   );
 };

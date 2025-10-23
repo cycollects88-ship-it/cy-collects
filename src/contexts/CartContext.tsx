@@ -17,7 +17,9 @@ interface CartContextProps {
   cart: Cart[];
   loading: boolean;
   addToCart: (productId: string, quantity?: number) => Promise<{ error: any }>;
+  addServiceToCart: (serviceId: string, quantity?: number) => Promise<{ error: any }>;
   removeFromCart: (productId: string) => Promise<{ error: any }>;
+  removeServiceFromCart: (serviceId: string) => Promise<{ error: any }>;
   updateCartItem: (productId: string, quantity: number) => Promise<{ error: any }>;
   clearCart: () => Promise<{ error: any }>;
   getCartTotal: () => number;
@@ -46,15 +48,22 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
   // Fetch cart when user changes
   useEffect(() => {
+    let mounted = true;
+
     const fetchCart = async () => {
       if (!user) {
-        setCart([]);
-        setLoading(false);
+        if (mounted) {
+          setCart([]);
+          setLoading(false);
+        }
         return;
       }
 
       try {
-        setLoading(true);
+        if (mounted) {
+          setLoading(true);
+        }
+        
         const { data, error } = await supabase
           .from("carts")
           .select("*")
@@ -63,17 +72,18 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
 
         if (error) {
           console.error("Error fetching cart:", error);
-          setCart([]);
-        } else if (mountedRef.current) {
+          if (mounted) {
+            setCart([]);
+            setLoading(false);
+          }
+        } else if (mounted) {
           setCart(data || []);
+          setLoading(false);
         }
       } catch (error) {
         console.error("Error in fetchCart:", error);
-        if (mountedRef.current) {
+        if (mounted) {
           setCart([]);
-        }
-      } finally {
-        if (mountedRef.current) {
           setLoading(false);
         }
       }
@@ -82,7 +92,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     fetchCart();
 
     return () => {
-      mountedRef.current = false;
+      mounted = false;
     };
   }, [user]);
 
@@ -127,6 +137,71 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
   };
 
+  /**
+   * Add a service to cart
+   */
+  const addServiceToCart = async (serviceId: string, quantity: number = 1) => {
+    if (!user) {
+      return { error: "No user logged in" };
+    }
+
+    try {
+      // Check if service already exists in cart
+      const existingItem = cart.find(item => item.service_id === serviceId);
+      
+      if (existingItem) {
+        // Update existing item quantity
+        const { data, error } = await supabase
+          .from("carts")
+          .update({ amount: (existingItem.amount || 0) + quantity })
+          .eq("user_id", user.id)
+          .eq("service_id", serviceId)
+          .select("*")
+          .single();
+
+        if (error) {
+          console.error("Error updating service in cart:", error);
+          return { error };
+        }
+
+        if (mountedRef.current) {
+          setCart(prev => 
+            prev.map(item => 
+              item.service_id === serviceId ? data : item
+            )
+          );
+        }
+
+        return { error: null };
+      }
+
+      // Add new service to cart
+      const { data, error } = await supabase
+        .from("carts")
+        .insert([{
+          user_id: user.id,
+          service_id: serviceId,
+          amount: quantity
+        }])
+        .select("*")
+        .single();
+
+      if (error) {
+        console.error("Error adding service to cart:", error);
+        return { error };
+      }
+
+      if (mountedRef.current) {
+        setCart(prev => [data, ...prev]);
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error("Error in addServiceToCart:", error);
+      return { error };
+    }
+  };
+
   const removeFromCart = async (productId: string) => {
     if (!user) {
       return { error: "No user logged in" };
@@ -151,6 +226,37 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
       return { error: null };
     } catch (error) {
       console.error("Error in removeFromCart:", error);
+      return { error };
+    }
+  };
+
+  /**
+   * Remove a service from cart
+   */
+  const removeServiceFromCart = async (serviceId: string) => {
+    if (!user) {
+      return { error: "No user logged in" };
+    }
+
+    try {
+      const { error } = await supabase
+        .from("carts")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("service_id", serviceId);
+
+      if (error) {
+        console.error("Error removing service from cart:", error);
+        return { error };
+      }
+
+      if (mountedRef.current) {
+        setCart(prev => prev.filter(item => item.service_id !== serviceId));
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error("Error in removeServiceFromCart:", error);
       return { error };
     }
   };
@@ -236,7 +342,9 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     cart,
     loading,
     addToCart,
+    addServiceToCart,
     removeFromCart,
+    removeServiceFromCart,
     updateCartItem,
     clearCart,
     getCartTotal,

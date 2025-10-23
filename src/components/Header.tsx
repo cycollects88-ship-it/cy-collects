@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthContext } from "../contexts/AuthContext";
+import { useCartContext } from "../contexts/CartContext";
+import { useUserDetailsContext } from "../contexts/UserDetailsContext";
 
 /**
  * Header component with logo, search bar, and user actions
@@ -8,9 +10,28 @@ import { useAuthContext } from "../contexts/AuthContext";
  */
 const Header: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [cartCount] = useState<number>(0); // Mock cart count
   const { user, signOut } = useAuthContext();
+  const { userDetails } = useUserDetailsContext();
+  const { getCartItemCount } = useCartContext();
+  const navigate = useNavigate();
+  const cartCount = getCartItemCount();
+  const isAdmin = userDetails?.role === "admin";
 
+  /**
+   * Handle search submission
+   * Navigate to home page with search query parameter
+   */
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      // Navigate to home with search query
+      navigate(`/?search=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  /**
+   * Handle sign out
+   */
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -38,7 +59,7 @@ const Header: React.FC = () => {
 
           {/* Search Bar */}
           <div className="flex-1 max-w-lg mx-8">
-            <div className="relative">
+            <form onSubmit={handleSearch} className="relative">
               <input
                 type="text"
                 placeholder="Search for cards, sets, or products..."
@@ -61,7 +82,7 @@ const Header: React.FC = () => {
                   />
                 </svg>
               </div>
-            </div>
+            </form>
           </div>
 
           {/* User Actions */}
@@ -97,23 +118,19 @@ const Header: React.FC = () => {
                 {/* Dropdown Menu */}
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
                   <div className="py-2">
-                    <Link
-                      to="/admin"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200"
-                    >
-                      Admin Panel
-                    </Link>
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200"
+                      >
+                        Admin Panel
+                      </Link>
+                    )}
                     <Link
                       to="/profile"
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200"
                     >
                       My Profile
-                    </Link>
-                    <Link
-                      to="/orders"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors duration-200"
-                    >
-                      My Orders
                     </Link>
                     <hr className="my-2" />
                     <button
@@ -144,7 +161,7 @@ const Header: React.FC = () => {
               </div>
             )}
 
-            {/* Want to Buy Button */}
+            {/* Request a Card Button */}
             <Link
               to="/want-to-buy"
               className="hidden md:flex items-center space-x-2 text-white hover:text-white/80 transition-colors duration-200 bg-white/10 px-3 py-2 rounded-lg hover:bg-white/20"
@@ -152,35 +169,36 @@ const Header: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
-              <span className="text-sm font-medium">Want to Buy</span>
+              <span className="text-sm font-medium">Request a Card</span>
             </Link>
 
             {/* Cart */}
-            <div className="relative">
-              <button className="flex items-center space-x-2 text-white hover:text-white/80 transition-colors duration-200">
-                <div className="relative">
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01"
-                    />
-                  </svg>
-                  {cartCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                      {cartCount}
-                    </span>
-                  )}
-                </div>
-                <span className="hidden sm:block">Cart</span>
-              </button>
-            </div>
+            <Link
+              to="/cart"
+              className="relative flex items-center space-x-2 text-white hover:text-white/80 transition-colors duration-200"
+            >
+              <div className="relative">
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01"
+                  />
+                </svg>
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                    {cartCount}
+                  </span>
+                )}
+              </div>
+              <span className="hidden sm:block">Cart</span>
+            </Link>
           </div>
         </div>
       </div>

@@ -3,9 +3,9 @@ import React, {
   useContext,
   useEffect,
   useState,
-  useRef,
+  useCallback,
 } from "react";
-import { supabase, supabaseAdmin } from "../utils/supabase-client";
+import { supabase } from "../utils/supabase-client";
 import { User, Session, AuthError } from "@supabase/supabase-js";
 
 export interface AuthContextProps {
@@ -18,6 +18,7 @@ export interface AuthContextProps {
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (password: string) => Promise<{ error: AuthError | null }>;
   updateProfile: (updates: any) => Promise<{ error: AuthError | null }>;
+  resendConfirmationEmail: (email: string) => Promise<{ error: AuthError | null }>;
 }
 
 const AuthContext = createContext<AuthContextProps | undefined>(undefined);
@@ -38,23 +39,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const mountedRef = useRef(true);
 
   useEffect(() => {
+    let mounted = true;
+
     // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
+        
         if (error) {
           console.error("Error getting session:", error);
-        } else if (mountedRef.current) {
+        }
+        
+        if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
+          setLoading(false);
         }
       } catch (error) {
         console.error("Error in getInitialSession:", error);
-      } finally {
-        if (mountedRef.current) {
+        if (mounted) {
           setLoading(false);
         }
       }
@@ -64,8 +69,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (mountedRef.current) {
+      (event, session) => {
+        if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           setLoading(false);
@@ -74,14 +79,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     return () => {
-      mountedRef.current = false;
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
-  const signUp = async (email: string, password: string, userDetails?: any) => {
+  const signUp = useCallback(async (email: string, password: string, userDetails?: any) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -99,11 +104,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Sign up error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -118,9 +123,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Sign in error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
@@ -132,12 +137,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Sign out error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
-  const resetPassword = async (email: string) => {
+  const resetPassword = useCallback(async (email: string) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${globalThis.location.origin}/reset-password`,
       });
 
       if (error) {
@@ -150,9 +155,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Reset password error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
-  const updatePassword = async (password: string) => {
+  const updatePassword = useCallback(async (password: string) => {
     try {
       const { error } = await supabase.auth.updateUser({
         password: password
@@ -168,9 +173,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Update password error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
-  const updateProfile = async (updates: any) => {
+  const updateProfile = useCallback(async (updates: any) => {
     try {
       const { error } = await supabase.auth.updateUser({
         data: updates
@@ -186,8 +191,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error("Update profile error:", error);
       return { error: error as AuthError };
     }
-  };
+  }, []);
 
+  const resendConfirmationEmail = useCallback(async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email,
+      });
+
+      if (error) {
+        console.error("Resend confirmation error:", error);
+        return { error };
+      }
+
+      return { error: null };
+    } catch (error) {
+      console.error("Resend confirmation error:", error);
+      return { error: error as AuthError };
+    }
+  }, []);
+
+  // Don't use useMemo - just create the value directly to ensure updates propagate
   const value: AuthContextProps = {
     user,
     session,
@@ -198,6 +223,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     resetPassword,
     updatePassword,
     updateProfile,
+    resendConfirmationEmail,
   };
 
   return (

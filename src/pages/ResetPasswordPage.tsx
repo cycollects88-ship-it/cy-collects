@@ -28,6 +28,7 @@ const ResetPasswordPage: React.FC = () => {
         setMessage("Password reset email sent! Please check your inbox and follow the instructions.");
       }
     } catch (err) {
+      console.error("Password reset error:", err);
       setError("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -54,8 +55,14 @@ const ResetPasswordPage: React.FC = () => {
           )}
           
           {message && (
-            <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-md">
-              {message}
+            <div className="bg-[#7D78A3]/10 border border-[#7D78A3]/30 text-[#7D78A3] px-4 py-3 rounded-md flex items-start space-x-3">
+              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              <div className="flex-1">
+                <p className="font-semibold">Check your email!</p>
+                <p className="text-sm mt-1">{message}</p>
+              </div>
             </div>
           )}
           

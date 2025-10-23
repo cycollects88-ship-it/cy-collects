@@ -148,18 +148,21 @@ export type Database = {
           id: string
           role: string | null
           user_id: string | null
+          phone_number: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           role?: string | null
           user_id?: string | null
+          phone_number?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           role?: string | null
           user_id?: string | null
+          phone_number?: string | null
         }
         Relationships: []
       }

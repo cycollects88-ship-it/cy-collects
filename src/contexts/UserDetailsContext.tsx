@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useState,
   useRef,
+  useCallback,
 } from "react";
 import { supabase } from "../utils/supabase-client";
 import { Database } from "../database.types";
@@ -39,9 +40,14 @@ export const UserDetailsProvider: React.FC<UserDetailsProviderProps> = ({ childr
   const [loading, setLoading] = useState(true);
   const { user } = useAuthContext();
   const mountedRef = useRef(true);
+  const creatingRef = useRef(false); // Prevent duplicate creation
 
   // Fetch user details when user changes
   useEffect(() => {
+    // Reset refs when effect runs (important for account switching)
+    mountedRef.current = true;
+    creatingRef.current = false;
+    
     const fetchUserDetails = async () => {
       if (!user) {
         setUserDetails(null);
@@ -51,17 +57,50 @@ export const UserDetailsProvider: React.FC<UserDetailsProviderProps> = ({ childr
 
       try {
         setLoading(true);
-        const { data, error } = await supabase
+        
+        // First, try to get existing user_details (may return multiple rows if duplicates exist)
+        const { data: allData, error: selectError } = await supabase
           .from("user_details")
           .select("*")
-          .eq("user_id", user.id)
-          .single();
+          .eq("user_id", user.id);
 
-        if (error) {
-          console.error("Error fetching user details:", error);
-          setUserDetails(null);
-        } else if (mountedRef.current) {
-          setUserDetails(data);
+        // If we found data, use the first (most recent) one
+        if (allData && allData.length > 0) {
+          if (mountedRef.current) {
+            setUserDetails(allData[0]);
+          }
+          if (allData.length > 1) {
+            console.warn(`Found ${allData.length} user_details rows for user ${user.id}. Using the first one.`);
+          }
+        } else if (selectError || !allData || allData.length === 0) {
+          // No row exists, create one (but only if not already creating)
+          if (creatingRef.current) {
+            // Already creating, skip
+            console.log("Already creating user_details, skipping");
+          } else {
+            creatingRef.current = true;
+            console.log("No user_details found, creating new row for user:", user.id);
+            
+            const { data: newData, error: insertError } = await supabase
+              .from("user_details")
+              .insert([
+                {
+                  user_id: user.id,
+                  role: "customer", // Default role for new users
+                }
+              ])
+              .select()
+              .single();
+
+            creatingRef.current = false;
+
+            if (insertError) {
+              console.error("Error creating user details:", insertError);
+              setUserDetails(null);
+            } else if (mountedRef.current) {
+              setUserDetails(newData);
+            }
+          }
         }
       } catch (error) {
         console.error("Error in fetchUserDetails:", error);
@@ -77,12 +116,32 @@ export const UserDetailsProvider: React.FC<UserDetailsProviderProps> = ({ childr
 
     fetchUserDetails();
 
+    // Set up real-time subscription for user_details changes
+    const subscription = supabase
+      .channel(`user_details_${user?.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "user_details",
+          filter: `user_id=eq.${user?.id}`
+        },
+        (payload) => {
+          if (mountedRef.current && payload.new) {
+            setUserDetails(payload.new as UserDetails);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       mountedRef.current = false;
+      subscription.unsubscribe().catch(console.error);
     };
   }, [user]);
 
-  const updateUserDetails = async (updates: UserDetailsUpdate) => {
+  const updateUserDetails = useCallback(async (updates: UserDetailsUpdate) => {
     if (!user) {
       return { error: "No user logged in" };
     }
@@ -109,9 +168,9 @@ export const UserDetailsProvider: React.FC<UserDetailsProviderProps> = ({ childr
       console.error("Error in updateUserDetails:", error);
       return { error };
     }
-  };
+  }, [user]);
 
-  const createUserDetails = async (userDetails: UserDetailsInsert) => {
+  const createUserDetails = useCallback(async (userDetails: UserDetailsInsert) => {
     if (!user) {
       return { error: "No user logged in" };
     }
@@ -137,8 +196,10 @@ export const UserDetailsProvider: React.FC<UserDetailsProviderProps> = ({ childr
       console.error("Error in createUserDetails:", error);
       return { error };
     }
-  };
+  }, [user]);
 
+  // Note: Not using useMemo here intentionally to ensure context updates propagate immediately
+  // eslint-disable-next-line react/jsx-no-constructed-context-values
   const value: UserDetailsContextProps = {
     userDetails,
     loading,

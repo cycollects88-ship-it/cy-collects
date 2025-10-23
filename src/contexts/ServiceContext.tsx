@@ -34,11 +34,6 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
   const [services, setServices] = useState<Service[]>([]);
 
   useEffect(() => {
-    // Temporarily disable Supabase calls for testing
-    setServices([]);
-    setLoading(false);
-    return;
-    
     const fetchServices = async () => {
       try {
         setLoading(true);

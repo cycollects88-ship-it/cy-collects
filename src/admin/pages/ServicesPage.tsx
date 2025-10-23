@@ -1,143 +1,206 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { useServiceContext, Service, ServiceInsert, ServiceUpdate } from "../../contexts/ServiceContext";
+import { supabase } from "../../utils/supabase-client";
+import ConfirmDialog from "../../components/ConfirmDialog";
+import AlertDialog from "../../components/AlertDialog";
 
-interface Service {
-  id: number;
-  name: string;
-  description: string;
-  price: number;
-  duration: string;
-  isActive: boolean;
-  category: string;
-  features: string[];
-  createdAt: string;
-}
+// Animation variants
+const containerVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { 
+      duration: 0.6,
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { 
+    opacity: 1, 
+    y: 0,
+    transition: { duration: 0.4 }
+  }
+};
+
+const modalVariants = {
+  hidden: { 
+    opacity: 0,
+    scale: 0.8,
+    y: 50
+  },
+  visible: { 
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      damping: 25,
+      stiffness: 300
+    }
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.8,
+    y: 50,
+    transition: {
+      duration: 0.2
+    }
+  }
+};
+
+const overlayVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1 },
+  exit: { opacity: 0 }
+};
+
+/**
+ * Helper function to upload image to Supabase storage
+ */
+const uploadImage = async (file: File, path: string): Promise<string | null> => {
+  try {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const filePath = `${path}/${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('media')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error('Error uploading image:', uploadError);
+      const { error: publicUploadError } = await supabase.storage
+        .from('media')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+          duplex: 'half'
+        });
+      
+      if (publicUploadError) {
+        console.error('Public upload also failed:', publicUploadError);
+        return null;
+      }
+    }
+
+    const { data } = supabase.storage
+      .from('media')
+      .getPublicUrl(filePath);
+
+    return data.publicUrl;
+  } catch (error) {
+    console.error('Exception uploading image:', error);
+    return null;
+  }
+};
 
 /**
  * Services Management Page
  * Allows admin to view, add, edit, and delete services
  */
 const ServicesPage: React.FC = () => {
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: 1,
-      name: "Card Authentication",
-      description: "Professional authentication service for high-value cards",
-      price: 2500,
-      duration: "3-5 business days",
-      isActive: true,
-      category: "Authentication",
-      features: ["Professional grading", "Certificate of authenticity", "Protective case"],
-      createdAt: "2024-01-10",
-    },
-    {
-      id: 2,
-      name: "Card Grading",
-      description: "Complete condition assessment and grading service",
-      price: 1500,
-      duration: "2-3 business days",
-      isActive: true,
-      category: "Grading",
-      features: ["Condition assessment", "Grade certificate", "Protective sleeve"],
-      createdAt: "2024-01-10",
-    },
-    {
-      id: 3,
-      name: "Deck Building Consultation",
-      description: "Expert advice on competitive deck construction",
-      price: 5000,
-      duration: "1-2 hours",
-      isActive: true,
-      category: "Consultation",
-      features: ["One-on-one consultation", "Deck analysis", "Strategy recommendations"],
-      createdAt: "2024-01-10",
-    },
-    {
-      id: 4,
-      name: "Collection Appraisal",
-      description: "Professional valuation of card collections",
-      price: 10000,
-      duration: "1-2 weeks",
-      isActive: false,
-      category: "Appraisal",
-      features: ["Detailed inventory", "Market value assessment", "Insurance documentation"],
-      createdAt: "2024-01-10",
-    },
-  ]);
+  const { 
+    loading: servicesLoading, 
+    services, 
+    createService, 
+    updateService, 
+    deleteService 
+  } = useServiceContext();
 
   const [showModal, setShowModal] = useState<boolean>(false);
-  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingItem, setEditingItem] = useState<Service | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [showAlert, setShowAlert] = useState<{ isOpen: boolean; title: string; message: string; variant: "success" | "error" }>({ isOpen: false, title: "", message: "", variant: "success" });
 
-  const categories = ["All", "Authentication", "Grading", "Consultation", "Appraisal", "Repair"];
-
-  const filteredServices = services.filter(service => {
-    const matchesSearch = service.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         service.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === "all" || service.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+  // Filter services based on search
+  const filteredItems = services.filter(item => {
+    const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+    return matchesSearch;
   });
 
-  const handleAddService = () => {
-    setEditingService(null);
+  const handleAddItem = () => {
+    setEditingItem(null);
     setShowModal(true);
   };
 
-  const handleEditService = (service: Service) => {
-    setEditingService(service);
+  const handleEditItem = (item: Service) => {
+    setEditingItem(item);
     setShowModal(true);
   };
 
-  const handleDeleteService = (id: number) => {
-    if (window.confirm("Are you sure you want to delete this service?")) {
-      setServices(services.filter(service => service.id !== id));
+  const handleDeleteItem = (id: string) => {
+    setDeleteTargetId(id);
+    setShowConfirmDelete(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteTargetId) {
+      setIsSubmitting(true);
+      const success = await deleteService(deleteTargetId);
+      if (!success) {
+        setShowAlert({ isOpen: true, title: "Error", message: "Failed to delete service. Please try again.", variant: "error" });
+      }
+      setIsSubmitting(false);
+      setShowConfirmDelete(false);
+      setDeleteTargetId(null);
     }
   };
 
-  const handleToggleActive = (id: number) => {
-    setServices(services.map(service =>
-      service.id === id
-        ? { ...service, isActive: !service.isActive }
-        : service
-    ));
+  const cancelDelete = () => {
+    setShowConfirmDelete(false);
+    setDeleteTargetId(null);
   };
 
-  const handleSaveService = (formData: Partial<Service>) => {
-    if (editingService) {
-      // Update existing service
-      setServices(services.map(service =>
-        service.id === editingService.id
-          ? { ...service, ...formData }
-          : service
-      ));
+  const handleSaveItem = async (formData: Partial<ServiceInsert>) => {
+    setIsSubmitting(true);
+    
+    if (editingItem) {
+      // Update existing item
+      const success = await updateService(editingItem.id, formData as ServiceUpdate);
+      if (success) {
+        setShowModal(false);
+        // Service will be updated in context automatically
+      } else {
+        setShowAlert({ isOpen: true, title: "Error", message: "Failed to update service. Please try again.", variant: "error" });
+      }
     } else {
-      // Add new service
-      const newService: Service = {
-        id: Math.max(...services.map(s => s.id), 0) + 1,
-        name: formData.name || "",
-        description: formData.description || "",
-        price: formData.price || 0,
-        duration: formData.duration || "",
-        isActive: formData.isActive ?? true,
-        category: formData.category || "Authentication",
-        features: formData.features || [],
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setServices([...services, newService]);
+      // Add new item
+      const success = await createService(formData as ServiceInsert);
+      if (success) {
+        setShowModal(false);
+        // Service will be added to context automatically
+      } else {
+        setShowAlert({ isOpen: true, title: "Error", message: "Failed to create service. Please try again.", variant: "error" });
+      }
     }
-    setShowModal(false);
+    
+    setIsSubmitting(false);
   };
-
-  const totalRevenue = services
-    .filter(s => s.isActive)
-    .reduce((sum, service) => sum + service.price, 0);
-  const activeServices = services.filter(s => s.isActive).length;
 
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {/* Header Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div 
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        variants={itemVariants}
+      >
         <div className="flex-1 max-w-md">
           <div className="relative">
             <input
@@ -153,33 +216,26 @@ const ServicesPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-          >
-            <option value="all">All Categories</option>
-            {categories.slice(1).map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-
-          <button
-            onClick={handleAddService}
-            className="bg-[#7D78A3] hover:bg-[#A29CBB] text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Add Service</span>
-          </button>
-        </div>
-      </div>
+        <button
+          onClick={handleAddItem}
+          className="bg-[#7D78A3] hover:bg-[#A29CBB] text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Add Service</span>
+        </button>
+      </motion.div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <motion.div 
+        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+        variants={itemVariants}
+      >
+        <motion.div 
+          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          whileHover={{ y: -2, transition: { duration: 0.2 } }}
+        >
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-blue-100">
               <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,323 +248,398 @@ const ServicesPage: React.FC = () => {
               <p className="text-2xl font-bold text-gray-900">{services.length}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <motion.div 
+          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          whileHover={{ y: -2, transition: { duration: 0.2 } }}
+        >
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-green-100">
               <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
               </svg>
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Services</p>
-              <p className="text-2xl font-bold text-gray-900">{activeServices}</p>
+              <p className="text-sm font-medium text-gray-600">Total Value</p>
+              <p className="text-2xl font-bold text-gray-900">
+                BND ${services.reduce((sum, item) => sum + (item.price || 0), 0).toLocaleString()}
+              </p>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <motion.div 
+          className="bg-white rounded-lg shadow-sm border border-gray-200 p-6"
+          whileHover={{ y: -2, transition: { duration: 0.2 } }}
+        >
           <div className="flex items-center">
-            <div className="p-3 rounded-full bg-yellow-100">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+            <div className="p-3 rounded-full bg-purple-100">
+              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Avg. Price</p>
               <p className="text-2xl font-bold text-gray-900">
-                BND ${Math.round(totalRevenue / activeServices).toLocaleString()}
+                BND ${services.length > 0 ? Math.round(services.reduce((sum, item) => sum + (item.price || 0), 0) / services.length).toLocaleString() : 0}
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-purple-100">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Categories</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {new Set(services.map(service => service.category)).size}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Services Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredServices.map((service) => (
-          <div
-            key={service.id}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow duration-200"
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-[#7D78A3]/10 rounded-lg">
-                    <svg className="w-5 h-5 text-[#7D78A3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{service.name}</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                      {service.category}
-                    </span>
-                  </div>
-                </div>
-                
-                <button
-                  onClick={() => handleToggleActive(service.id)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#7D78A3] focus:ring-offset-2 ${
-                    service.isActive ? "bg-[#7D78A3]" : "bg-gray-200"
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      service.isActive ? "translate-x-5" : "translate-x-0"
-                    }`}
-                  />
-                </button>
-              </div>
+      <motion.div 
+        className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+        variants={itemVariants}
+      >
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">
+            Services ({filteredItems.length})
+          </h3>
+        </div>
 
-              <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                {service.description}
-              </p>
-
-              <div className="space-y-3 mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Price:</span>
-                  <span className="text-lg font-bold text-[#7D78A3]">BND ${service.price.toLocaleString()}</span>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Duration:</span>
-                  <span className="text-sm font-medium text-gray-900">{service.duration}</span>
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Features:</h4>
-                <ul className="space-y-1">
-                  {service.features.slice(0, 3).map((feature, index) => (
-                    <li key={index} className="flex items-center text-sm text-gray-600">
-                      <svg className="w-3 h-3 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  service.isActive
-                    ? "bg-green-100 text-green-800"
-                    : "bg-gray-100 text-gray-800"
-                }`}>
-                  {service.isActive ? "Active" : "Inactive"}
-                </span>
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleEditService(service)}
-                    className="text-[#7D78A3] hover:text-[#A29CBB] transition-colors duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteService(service.id)}
-                    className="text-red-600 hover:text-red-900 transition-colors duration-200"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
+        {servicesLoading ? (
+          <div className="p-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7D78A3] mx-auto"></div>
+            <p className="mt-2 text-gray-500">Loading services...</p>
           </div>
-        ))}
-      </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Service
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredItems.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-12 w-12">
+                          {item.media_url ? (
+                            <img
+                              className="h-12 w-12 rounded-lg object-cover"
+                              src={item.media_url}
+                              alt={item.name || "Service"}
+                            />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-[#7D78A3] to-[#A29CBB] flex items-center justify-center">
+                              <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{item.name || "Unnamed Service"}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      BND ${(item.price || 0).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEditItem(item)}
+                        className="text-[#7D78A3] hover:text-[#A29CBB] transition-colors duration-200"
+                        disabled={isSubmitting}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteItem(item.id)}
+                        className="text-red-600 hover:text-red-900 transition-colors duration-200"
+                        disabled={isSubmitting}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </motion.div>
 
       {/* Add/Edit Modal */}
-      {showModal && (
-        <ServiceModal
-          service={editingService}
-          categories={categories.slice(1)}
-          onSave={handleSaveService}
-          onClose={() => setShowModal(false)}
-        />
-      )}
-    </div>
+      <AnimatePresence>
+        {showModal && (
+          <ServiceModal
+            item={editingItem}
+            onSave={handleSaveItem}
+            onClose={() => setShowModal(false)}
+            isSubmitting={isSubmitting}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showConfirmDelete}
+        title="Delete Service?"
+        message="Are you sure you want to delete this service? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+      />
+
+      {/* Alert Dialog */}
+      <AlertDialog
+        isOpen={showAlert.isOpen}
+        title={showAlert.variant === "error" ? "Error" : "Success"}
+        message={showAlert.message}
+        variant={showAlert.variant}
+        onClose={() => setShowAlert({ isOpen: false, title: "", message: "", variant: "success" })}
+      />
+    </motion.div>
   );
 };
 
 interface ServiceModalProps {
-  service: Service | null;
-  categories: string[];
-  onSave: (data: Partial<Service>) => void;
+  item: Service | null;
+  onSave: (data: Partial<ServiceInsert>) => void;
   onClose: () => void;
+  isSubmitting: boolean;
 }
 
-const ServiceModal: React.FC<ServiceModalProps> = ({ service, categories, onSave, onClose }) => {
+const ServiceModal: React.FC<ServiceModalProps> = ({ item, onSave, onClose, isSubmitting }) => {
   const [formData, setFormData] = useState({
-    name: service?.name || "",
-    description: service?.description || "",
-    price: service?.price || 0,
-    duration: service?.duration || "",
-    category: service?.category || "Authentication",
-    features: service?.features?.join("\n") || "",
-    isActive: service?.isActive ?? true,
+    name: item?.name || "",
+    price: item?.price || 0,
+    media_url: item?.media_url || "",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      ...formData,
-      features: formData.features.split("\n").filter(f => f.trim() !== ""),
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(item?.media_url || null);
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
+  const [showAlert, setShowAlert] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: "" });
+
+  // Reset form data when item changes
+  useEffect(() => {
+    setFormData({
+      name: item?.name || "",
+      price: item?.price || 0,
+      media_url: item?.media_url || "",
     });
+    setImageFile(null);
+    setImagePreview(item?.media_url || null);
+  }, [item]);
+
+  // Handle image file selection
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    let finalFormData = { ...formData };
+    
+    // Upload image if new file is selected
+    if (imageFile) {
+      setUploadingImage(true);
+      
+      try {
+        const imageUrl = await uploadImage(imageFile, 'services');
+        if (imageUrl) {
+          finalFormData.media_url = imageUrl;
+        } else {
+          setShowAlert({ isOpen: true, message: 'Failed to upload image. Please try again.' });
+          setUploadingImage(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        setShowAlert({ isOpen: true, message: 'Failed to upload image. Please try again.' });
+        setUploadingImage(false);
+        return;
+      }
+      
+      setUploadingImage(false);
+    }
+    
+    onSave(finalFormData);
   };
 
   return createPortal(
-    <div className="fixed top-0 left-0 w-screen h-screen bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-medium text-gray-900">
-            {service ? "Edit Service" : "Add New Service"}
+    <motion.div 
+      className="fixed top-0 left-0 w-screen h-screen bg-black bg-opacity-50 flex items-center justify-center z-[9999] p-4"
+      variants={overlayVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+    >
+      <motion.div 
+        className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[95vh] overflow-y-auto border-0"
+        variants={modalVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
+        <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-[#7D78A3] to-[#A29CBB]">
+          <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+            <div className="w-8 h-8 bg-white bg-opacity-20 rounded-lg flex items-center justify-center">
+              {item ? "✏️" : "➕"}
+            </div>
+            {item ? "Edit Service" : "Add New Service"}
           </h3>
+          <p className="text-white text-opacity-80 mt-2">
+            {item ? "Update your service details and image" : "Add a new service to your offerings"}
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Service Name
+            <label className="block text-sm font-semibold text-gray-800 mb-3">
+              Service Name *
             </label>
             <input
               type="text"
               required
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-              placeholder="e.g., Card Authentication"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-[#7D78A3]/20 focus:border-[#7D78A3] transition-all duration-200 text-gray-800 placeholder-gray-400"
+              placeholder="e.g., Card Authentication Service"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
+            <label className="block text-sm font-semibold text-gray-800 mb-3">
+              Price (BND $) *
             </label>
-            <textarea
-              required
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-              placeholder="Brief description of the service"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Price (BND $)
-              </label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">$</span>
               <input
                 type="number"
                 required
                 min="0"
+                step="0.01"
                 value={formData.price}
                 onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
+                className="w-full pl-8 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-[#7D78A3]/20 focus:border-[#7D78A3] transition-all duration-200 text-gray-800"
+                placeholder="0.00"
               />
             </div>
+          </div>
 
+          {/* Image Upload Section */}
+          <div className="space-y-4">
+            <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <span className="w-6 h-6 bg-[#7D78A3] rounded-lg flex items-center justify-center text-white text-sm">📷</span>
+              Service Image
+            </h4>
+            
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Duration
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Image
               </label>
-              <input
-                type="text"
-                required
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-                placeholder="e.g., 2-3 business days"
-              />
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <div className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all duration-200 ${
+                  imagePreview 
+                    ? 'border-green-300 bg-green-50' 
+                    : 'border-gray-300 bg-gray-50 hover:border-[#7D78A3] hover:bg-[#7D78A3]/5'
+                }`}>
+                  {imagePreview ? (
+                    <div className="space-y-3">
+                      <img 
+                        src={imagePreview} 
+                        alt="Preview" 
+                        className="w-full h-48 object-cover rounded-xl mx-auto"
+                      />
+                      <p className="text-sm text-green-600 font-medium">✓ Image selected</p>
+                      <p className="text-xs text-gray-500">Click to change</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="w-12 h-12 bg-gray-200 rounded-xl mx-auto flex items-center justify-center">
+                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Upload service image</p>
+                        <p className="text-xs text-gray-500">PNG, JPG up to 10MB</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Category
-            </label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-            >
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Features (one per line)
-            </label>
-            <textarea
-              value={formData.features}
-              onChange={(e) => setFormData({ ...formData, features: e.target.value })}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
-              placeholder="Professional grading&#10;Certificate of authenticity&#10;Protective case"
-            />
-          </div>
-
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="isActive"
-              checked={formData.isActive}
-              onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-              className="h-4 w-4 text-[#7D78A3] focus:ring-[#7D78A3] border-gray-300 rounded"
-            />
-            <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
-              Active (available to customers)
-            </label>
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-4 pt-8 border-t border-gray-100">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+              className="px-6 py-3 border-2 border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 font-medium"
+              disabled={isSubmitting || uploadingImage}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#7D78A3] text-white rounded-lg hover:bg-[#A29CBB] transition-colors duration-200"
+              className="px-8 py-3 bg-gradient-to-r from-[#7D78A3] to-[#A29CBB] text-white rounded-xl hover:from-[#6D68A3] hover:to-[#9289BB] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-3 font-medium shadow-lg hover:shadow-xl"
+              disabled={isSubmitting || uploadingImage}
             >
-              {service ? "Update" : "Add"} Service
+              {(isSubmitting || uploadingImage) && (
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+              )}
+              <span>
+                {uploadingImage ? "Uploading Image..." : `${item ? "Update" : "Add"} Service`}
+              </span>
+              {!isSubmitting && !uploadingImage && (
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </button>
           </div>
         </form>
-      </div>
-    </div>,
+
+        {/* Alert Dialog */}
+        <AlertDialog
+          isOpen={showAlert.isOpen}
+          title="Error"
+          message={showAlert.message}
+          variant="error"
+          onClose={() => setShowAlert({ isOpen: false, message: "" })}
+        />
+      </motion.div>
+    </motion.div>,
     document.body
   );
 };

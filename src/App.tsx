@@ -14,25 +14,24 @@ import { WantToBuyProvider } from './contexts/WantToBuyContext';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
+import ServicesPage from './pages/ServicesPage';
+import CartPage from './pages/CartPage';
 import WantToBuyPage from './pages/WantToBuyPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ProfilePage from './pages/ProfilePage';
 
 // Import admin components
 import AdminLayout from './admin/components/AdminLayout';
 import InventoryPage from './admin/pages/InventoryPage';
 import CategoriesPage from './admin/pages/CategoriesPage';
-import ServicesPage from './admin/pages/ServicesPage';
+import AdminServicesPage from './admin/pages/ServicesPage';
 import UsersPage from './admin/pages/UsersPage';
 import WantToBuyAdminPage from './admin/pages/WantToBuyPage';
 
-import TestApp from './TestApp';
-
 // Main App component with routing
 function AppContent() {
-  console.log("AppContent - Rendering...");
-  
   return (
     <Router>
       <Routes>
@@ -43,10 +42,30 @@ function AppContent() {
           </Layout>
         } />
         
+        <Route path="/services" element={
+          <Layout>
+            <ServicesPage />
+          </Layout>
+        } />
+        
+        <Route path="/cart" element={
+          <Layout>
+            <CartPage />
+          </Layout>
+        } />
+        
         <Route path="/want-to-buy" element={
           <Layout>
             <WantToBuyPage />
           </Layout>
+        } />
+
+        <Route path="/profile" element={
+          <ProtectedRoute>
+            <Layout>
+              <ProfilePage />
+            </Layout>
+          </ProtectedRoute>
         } />
 
         {/* Auth routes - redirect to home if already logged in */}
@@ -96,7 +115,7 @@ function AppContent() {
         <Route path="/admin/services" element={
           <ProtectedRoute>
             <AdminLayout>
-              <ServicesPage />
+              <AdminServicesPage />
             </AdminLayout>
           </ProtectedRoute>
         } />
@@ -117,19 +136,6 @@ function AppContent() {
           </ProtectedRoute>
         } />
       </Routes>
-      
-      {/* Admin Access Button (hidden in production) */}
-      <a
-        href="/admin"
-        className="fixed bottom-4 right-4 bg-[#7D78A3] hover:bg-[#A29CBB] text-white p-3 rounded-full shadow-lg transition-colors duration-200 z-50"
-        title="Admin Panel"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      </a>
-      
     </Router>
   );
 }
@@ -138,8 +144,6 @@ function AppContent() {
 
 // Main App component with all providers
 function App() {
-  console.log("App - Rendering main App component...");
-  
   return (
     <AuthProvider>
       <CartProvider>
