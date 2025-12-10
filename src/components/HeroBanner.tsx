@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useProductContext } from "../contexts/ProductContext";
 import { useServiceContext } from "../contexts/ServiceContext";
+import heroBackgroundImage from "../assets/image/image.png";
 
 /**
  * Hero Banner component with promotional content and carousel
@@ -65,15 +66,23 @@ const HeroBanner: React.FC = () => {
 
   return (
     <section className="relative bg-[#7D78A3] overflow-hidden">
+      {/* Background Image */}
+      <div 
+        className="absolute inset-0 opacity-50"
+        style={{
+          backgroundImage: `url(${heroBackgroundImage})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          transform: "scaleX(-1)"
+        }}
+      />
+      
+      {/* Gradient Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-r from-[#7D78A3]/50 to-[#7D78A3]/40" />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="relative">
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"></div>
-            <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full -translate-y-48 translate-x-48"></div>
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-white/10 rounded-full translate-y-32 -translate-x-32"></div>
-          </div>
-
           {/* Content */}
           <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             {/* Text Content */}

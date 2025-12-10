@@ -50,12 +50,12 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {/* Image Section */}
               <div className="space-y-4">
                 {/* Front Image */}
-                <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                <div className="aspect-[5/7] rounded-lg overflow-hidden bg-gray-100">
                   {product.media_url_front ? (
                     <img
                       src={product.media_url_front}
                       alt={`${product.name || "Product"} - Front`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -68,11 +68,11 @@ const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
                 {/* Back Image (if available) */}
                 {product.media_url_back && (
-                  <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                  <div className="aspect-[5/7] rounded-lg overflow-hidden bg-gray-100">
                     <img
                       src={product.media_url_back}
                       alt={`${product.name || "Product"} - Back`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                   </div>
                 )}

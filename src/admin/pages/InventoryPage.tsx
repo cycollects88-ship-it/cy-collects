@@ -138,6 +138,7 @@ const InventoryPage: React.FC = () => {
   const [editingItem, setEditingItem] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sortOption, setSortOption] = useState<string>("newest");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -148,6 +149,27 @@ const InventoryPage: React.FC = () => {
     const matchesSearch = item.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
     const matchesCategory = categoryFilter === "all" || item.category_id === categoryFilter;
     return matchesSearch && matchesCategory;
+  });
+
+  /**
+   * Sort products based on selected sort option
+   */
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    switch (sortOption) {
+      case "name-asc":
+        return (a.name || "").localeCompare(b.name || "");
+      case "name-desc":
+        return (b.name || "").localeCompare(a.name || "");
+      case "price-asc":
+        return (a.price || 0) - (b.price || 0);
+      case "price-desc":
+        return (b.price || 0) - (a.price || 0);
+      case "oldest":
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      case "newest":
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
   });
 
   // Get category name by ID
@@ -256,6 +278,19 @@ const InventoryPage: React.FC = () => {
             ))}
           </select>
 
+          <select
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name-asc">A-Z</option>
+            <option value="name-desc">Z-A</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+          </select>
+
           <button
             onClick={handleAddItem}
             className="bg-[#7D78A3] hover:bg-[#A29CBB] text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200"
@@ -355,7 +390,7 @@ const InventoryPage: React.FC = () => {
       >
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900">
-            Pokemon Cards ({filteredItems.length})
+            Pokemon Cards ({sortedItems.length})
           </h3>
         </div>
 
@@ -390,19 +425,19 @@ const InventoryPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map((item) => (
+                {sortedItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-12 w-12">
+                        <div className="flex-shrink-0 h-14 w-10">
                           {item.media_url_front ? (
                             <img
-                              className="h-12 w-12 rounded-lg object-cover"
+                              className="h-14 w-10 rounded-lg object-contain"
                               src={item.media_url_front}
                               alt={item.name || "Pokemon Card"}
                             />
                           ) : (
-                            <div className="h-12 w-12 rounded-lg bg-gray-200 flex items-center justify-center">
+                            <div className="h-14 w-10 rounded-lg bg-gray-200 flex items-center justify-center">
                               <svg className="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>

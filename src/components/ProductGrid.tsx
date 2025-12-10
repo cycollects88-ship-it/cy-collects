@@ -16,6 +16,7 @@ interface ProductGridProps {
  */
 const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory || "all");
+  const [sortOption, setSortOption] = useState<string>("newest");
   const { products, loading: productsLoading, searchProducts } = useProductContext();
   const { categories, loading: categoriesLoading } = useCategoryContext();
   const { addToCart } = useCartContext();
@@ -76,6 +77,27 @@ const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery 
     filteredProducts = filteredProducts.filter(product => product.category_id === selectedCategory);
   }
 
+  /**
+   * Sort products based on selected sort option
+   */
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    switch (sortOption) {
+      case "name-asc":
+        return (a.name || "").localeCompare(b.name || "");
+      case "name-desc":
+        return (b.name || "").localeCompare(a.name || "");
+      case "price-asc":
+        return (a.price || 0) - (b.price || 0);
+      case "price-desc":
+        return (b.price || 0) - (a.price || 0);
+      case "oldest":
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      case "newest":
+      default:
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
+  });
+
   return (
     <section className="py-16 bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -85,8 +107,22 @@ const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery 
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Newly Arrived!</h2>
             <p className="text-gray-600">Discover the latest additions to our collection</p>
           </div>
-          <div className="text-sm text-gray-500 mt-4 sm:mt-0">
-            Showing {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"}
+          <div className="flex items-center gap-4 mt-4 sm:mt-0">
+            <div className="text-sm text-gray-500">
+              Showing {sortedProducts.length} {sortedProducts.length === 1 ? "product" : "products"}
+            </div>
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7D78A3] focus:border-transparent text-sm"
+            >
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="name-asc">A-Z</option>
+              <option value="name-desc">Z-A</option>
+              <option value="price-asc">Price: Low to High</option>
+              <option value="price-desc">Price: High to Low</option>
+            </select>
           </div>
         </div>
 
@@ -135,9 +171,9 @@ const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery 
           </div>
         )}
         
-        {!productsLoading && filteredProducts.length > 0 && (
+        {!productsLoading && sortedProducts.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map((product) => (
+            {sortedProducts.map((product) => (
               <div
                 key={product.id}
                 className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group"
@@ -145,7 +181,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery 
                 {/* Product Image - Clickable */}
                 <button 
                   type="button"
-                  className="relative aspect-square overflow-hidden w-full"
+                  className="relative aspect-[5/7] overflow-hidden w-full"
                   onClick={() => handleProductClick(product)}
                   aria-label={`View details for ${product.name || "product"}`}
                 >
@@ -153,7 +189,7 @@ const ProductGrid: React.FC<ProductGridProps> = ({ initialCategory, searchQuery 
                     <img
                       src={product.media_url_front}
                       alt={product.name || "Product"}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-200 flex items-center justify-center">

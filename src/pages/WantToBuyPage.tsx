@@ -410,7 +410,7 @@ const WantToBuyPage: React.FC = () => {
                       <li>We'll search our network of suppliers and collectors</li>
                       <li>If we find your card, we'll contact you with details</li>
                       <li>No obligation to purchase - we'll check availability first</li>
-                      <li>Typically takes 1-3 business days to respond</li>
+                      <li>Typically takes 1-7 business days to respond</li>
                     </ul>
                   </div>
                 </div>

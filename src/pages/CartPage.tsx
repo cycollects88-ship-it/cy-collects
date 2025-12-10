@@ -181,12 +181,12 @@ const CartPage: React.FC = () => {
                   <div key={item.id} className="p-6 border-b border-gray-200 last:border-b-0">
                     <div className="flex items-start space-x-4">
                       {/* Image */}
-                      <div className="flex-shrink-0 w-24 h-24">
+                      <div className="flex-shrink-0 w-20 h-28">
                         {item.image ? (
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="w-full h-full object-cover rounded-lg"
+                            className="w-full h-full object-contain rounded-lg"
                           />
                         ) : (
                           <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center">
