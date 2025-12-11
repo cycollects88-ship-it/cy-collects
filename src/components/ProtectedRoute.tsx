@@ -20,24 +20,24 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { user, loading } = useAuthContext();
   const location = useLocation();
 
-  // // Show loading spinner while checking authentication
-  // if (loading) {
-  //   return (
-  //     <div className="min-h-screen flex items-center justify-center">
-  //       <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
-  //     </div>
-  //   );
-  // }
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
-  // // If authentication is required but user is not logged in
-  // if (requireAuth && !user) {
-  //   return <Navigate to={redirectTo} state={{ from: location }} replace />;
-  // }
+  // If authentication is required but user is not logged in
+  if (requireAuth && !user) {
+    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+  }
 
-  // // If authentication is not required but user is logged in (for login/register pages)
-  // if (!requireAuth && user) {
-  //   return <Navigate to={redirectTo} replace />;
-  // }
+  // If authentication is not required but user is logged in (for login/register pages)
+  if (!requireAuth && user) {
+    return <Navigate to={redirectTo} replace />;
+  }
 
   return <>{children}</>;
 };

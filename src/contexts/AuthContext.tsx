@@ -8,16 +8,34 @@ import React, {
 import { supabase } from "../utils/supabase-client";
 import { User, Session, AuthError } from "@supabase/supabase-js";
 
+/**
+ * User metadata type for signup
+ */
+export interface UserMetadata {
+  full_name?: string;
+  avatar_url?: string;
+  [key: string]: string | number | boolean | undefined;
+}
+
+/**
+ * Profile update type for user data changes
+ */
+export interface ProfileUpdate {
+  email?: string;
+  password?: string;
+  data?: UserMetadata;
+}
+
 export interface AuthContextProps {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, userDetails?: any) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, userDetails?: UserMetadata) => Promise<{ error: AuthError | null }>;
   signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<{ error: AuthError | null }>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
   updatePassword: (password: string) => Promise<{ error: AuthError | null }>;
-  updateProfile: (updates: any) => Promise<{ error: AuthError | null }>;
+  updateProfile: (updates: UserMetadata) => Promise<{ error: AuthError | null }>;
   resendConfirmationEmail: (email: string) => Promise<{ error: AuthError | null }>;
 }
 
@@ -84,7 +102,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, userDetails?: any) => {
+  const signUp = useCallback(async (email: string, password: string, userDetails?: UserMetadata) => {
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -175,7 +193,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const updateProfile = useCallback(async (updates: any) => {
+  const updateProfile = useCallback(async (updates: UserMetadata) => {
     try {
       const { error } = await supabase.auth.updateUser({
         data: updates
